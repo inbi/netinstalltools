@@ -1,0 +1,5 @@
+C:\netinst>fastinst.exe
+FastInst Ver 1.1 for NetInstall
+ Syntax: FastInst /Wksta:wkstaname [/Prj:"ProjectName"] [/Service] [/PollOnly]
+
+\\s080sl01\e080_alni00$\Install\DCVD erweiterter Client

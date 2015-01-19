@@ -1,0 +1,321 @@
+<html>
+<head>
+<hta:application id="VisFI" applicationname="VisFI" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="yes" sysmenu="yes" minimizebutton="yes" maximizebutton="no"
+single-instance="yes" icon="%windir%\system32\accwiz.exe" version="1.1"
+/>
+<title>Visual FastInst 1.1</title>
+<script>
+
+window.resizeTo(550,1);
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+var wsh = new ActiveXObject("WScript.Shell");
+var envWindir=wsh.ExpandEnvironmentStrings("%windir%");
+
+//wsh.popup("Lese Netinstall-Datenbank Informationen:\nDieser Vorgang kann einige Sekunden dauern.",3,"A message from the crypt",64);
+sProgbarPath=envWindir+"\\pchealth\\helpctr\\System\\images\\progbar.gif";
+var nWin=window.open("","nWin","status=no,toolbar=no,location=no,menubar=no,width=230,height=100");
+nWin.document.write("<head><title>VisFI</title></head><font face=Verdana size=1>Lese NetInstall Datenbank Informationen. Dieser Vorgang kann einige Sekunden dauern...</font><br><br><img src='"+sProgbarPath+"'>");
+
+sNiDatabaseGUID="";
+sNiDatabaseVersion="";
+sLastNID="";
+
+try {
+   var niServerPath = wsh.RegRead ("HKLM\\SOFTWARE\\NetSupport\\NetInstall\\ServerSourcePath");
+   var sLastNID=wsh.RegRead("HKCU\\Software\\Flatbyte\\VisFI\\LastNID");
+   var sLastTarget=wsh.RegRead("HKCU\\Software\\Flatbyte\\VisFI\\LastTarget");
+   }
+catch(e) {;}
+
+if(!sLastTarget) var sLastTarget=wsh.ExpandEnvironmentStrings("%COMPUTERNAME%");
+
+function AutoSelectNiDb() {
+   if(niServerPath) {
+      sNIDName=sLastNID;
+      nidname.innerText=sNIDName;
+      nidname.title=sNIDName;
+      if(!fso.FileExists(sNIDName)) {
+         wsh.popup("In diesem Verzeichnis existiert keine NetInstall Datenbank.",3,"VisFI",48);
+         }
+      else {
+         ResetPrjList();
+         ReadNiDb(sNIDName);
+         inptab.disabled=false;
+         }         
+      }
+   }
+
+function AutoSetValues() {
+   if(useniinst.checked) {
+      servinst.disabled=true;
+      pollonly.disabled=true;
+      compname.disabled=true;
+      uninstall.disabled=false;
+      sLastTarget=compname.value;
+      compname.innerText=wsh.ExpandEnvironmentStrings("%COMPUTERNAME%");
+      uninstall.checked? bSubmit.value="Deinstallieren": bSubmit.value="Installieren";
+      }
+   else {
+      servinst.disabled=false;
+      pollonly.disabled=false;
+      compname.disabled=false;
+      uninstall.disabled=true;
+      compname.innerText=sLastTarget;
+      bSubmit.value="FastInst!";
+      }
+   }
+
+function PopulateSelectBox() {
+   try {
+      f = fso.GetFolder(niServerPath+"Install\\");
+      fc = new Enumerator(f.SubFolders);
+      for (;!fc.atEnd(); fc.moveNext())  {
+         var oOption = document.createElement("OPTION");
+         var sSubDir=fc.item()+"";
+         var sSplit=sSubDir.split("\\");
+         oOption.text=sSplit[(sSplit.length)-1];
+         oOption.value=fc.item()+"\\nidb.nid";
+         nidsel.add(oOption);
+         }
+      }
+   catch(e) {;}
+   }
+
+function SelectFolder() {
+   var oShell = new ActiveXObject("Shell.Application");
+   var oFolder = oShell.BrowseForFolder(0, "Bitte wählen Sie ein Verzeichnis in dem sich die NetInstall Datenbank befindet.", 0);
+   if(oFolder!=null) {
+    oFolderItem = oFolder.Self;
+    var sSelPath=oFolderItem.Path+"\\nidb.nid";
+   
+   if(!fso.FileExists(sSelPath)) {
+      alert("In diesem Verzeichnis existiert keine NetInstall Datenbank.");
+      }
+    else {
+      nidname.innerText=sSelPath;
+      nidname.title=sSelPath;
+      ResetPrjList();
+      ReadNiDb(sSelPath);
+      inptab.disabled=false;
+      nidname.disabled=false;
+      nidsel.selectedIndex=0;
+      }
+   }
+}
+
+function ApplyFilter() {
+   ResetPrjList();
+   ReadNiDb(nidname.value);
+   }
+
+function ReadNiDb(sNidFile) {
+   oFile = new ActiveXObject("Scripting.FileSystemObject");
+
+   if(!fso.FileExists(sNidFile)) {
+      alert("_"+sNidFile+"\nIn diesem Verzeichnis existiert keine NetInstall Datenbank.");
+      return;
+      }
+   inptab.disabled=false;
+   sNiDatabaseGUID="";
+
+   dSDate=new Date();
+
+   try {
+      oStream = oFile.OpenTextFile(sNidFile);
+      }
+   catch(e) {
+      if (!sCmdParam) alert(e.description); // nur wenn nicht im batchmodus.
+      return;
+      }
+
+   iCnt=0;
+   sFolder="";
+   
+   do {      
+      sToParse=oStream.ReadLine();
+
+      // "database"
+      if(sToParse.substr(0,13)=="$NIRT_VERSION") {
+         sNiDatabaseVersion=sToParse.substr(14);
+         }
+      if(sToParse.substr(0,4)=="GUID" && sNiDatabaseGUID=="") {
+         sNiDatabaseGUID=sToParse.substr(5);
+         }
+
+      // "folder"
+      if(sToParse.substr(0,1)=="&") {
+         sFolder="";
+         do {
+            sToParse2=oStream.ReadLine();
+            if(sToParse2.substr(0,4)=="GUID") sFolder=sToParse2.substr(5);
+            } while (!sToParse2=="")
+         sFolder+=sToParse.substr(1);
+         }
+
+      // "project"
+      if(sToParse.substr(0,1)=="~") {
+         sText=sToParse.substr(1);
+         sValue="";
+
+         do {
+            sToParse2=oStream.ReadLine();
+            if(sToParse2.substr(0,4)=="GUID") sValue+=sToParse2.substr(5);
+            if(sToParse2.substr(0,5)=="FLAGS") sValue+="|"+sToParse2.substr(6)+"|"+sFolder;
+            if(sToParse2.substr(0,4)=="0b32") sValue+="|"+sToParse2.substr(6);
+            } while (!sToParse2=="")
+
+         //if(sValue.indexOf("@HIDE") >0) sText+=" *";
+
+         if(sValue.indexOf("@HIDE") <=0 || shhidden.checked) {
+            if(dbfilter.value.length==0 || sToParse.indexOf(dbfilter.value)>-1) {
+               var oOption = document.createElement("OPTION");
+               oOption.text=sText;
+               oOption.value=sValue;
+               nidprj.add(oOption);
+               iCnt++;
+               }
+            }
+         }
+
+   } while(!oStream.AtEndOfStream)
+   oStream.Close();
+
+   dEDate=new Date();
+
+   iTakenTime=dEDate.getTime()-dSDate.getTime()
+
+   info.innerHTML=iCnt+" Projekte in Datenbank - "+Math.round(iTakenTime)+ " msek. zum Einlesen benötigt <span style=\"color:#999999\">- &copy;2005 by <a href=\"http://ww.flatbyte.com\">flatbyte.com</a></span>";
+}
+
+function RefreshList() {
+   if(sortall.checked) SortPrjList();
+   else { ResetPrjList(); ReadNiDb(nidname.value); }
+   }
+function SortPrjList() {
+   for(i=0;i<nidprj.length;i++) {
+      for(j=0;j<nidprj.length-1;j++) {
+         if(nidprj.children(i).text<nidprj.children(j).text) {
+            nidprj.children(i).swapNode(nidprj.children(j));
+            }
+         }
+      }
+   }
+
+function ResetPrjList() {
+	for(var i=nidprj.length-1; i>-1 ;i--) {
+		nidprj.remove(i);
+	}
+}
+
+function ShowPrj(i) {
+   sInfo=nidprj[i].text+"\n"+nidprj[i].value;
+   alert(sInfo);
+}
+
+function DoFastInst() {
+   sFastInstExe=niServerPath+"fastinst.exe"
+   sPrj=nidprj.options[nidprj.options.selectedIndex].text;
+   sGUID=nidprj.options[nidprj.options.selectedIndex].value.substr(0,38);
+
+   if(useniinst.checked) {
+	   sInstStr="niinst32.exe /execute:"+sGUID;
+      if(uninstall.checked) sInstStr+=" /uninstall";
+	   }
+   else {
+      sInstStr=sFastInstExe+" /Wksta:"+compname.value+" /Prj:"+sGUID;
+      if(servinst.checked) sInstStr+=" /service";
+      if(pollonly.checked) sInstStr=sFastInstExe+" /Wksta:"+compname.value+" /pollonly";
+      wsh.RegWrite("HKCU\\Software\\Flatbyte\\VisFI\\LastTarget", compname.value, "REG_SZ");
+   }
+   
+   iReturn = wsh.Run(sInstStr,0,1);
+   //alert(sInstStr);
+   //if(!iReturn) alert("Installation nicht erfolgreich!");
+   }
+
+function SelChangeNID() {
+   //alert(nidsel.options[nidsel.selectedIndex].value);
+   if(nidsel.selectedIndex>0) nidname.value=nidname.title=nidsel.options[nidsel.selectedIndex].value;
+   if(nidsel.options[nidsel.selectedIndex].value=="") {
+      nidname.disabled=false;
+      }
+   else {
+      nidname.disabled=true;      
+      wsh.RegWrite("HKCU\\Software\\Flatbyte\\VisFI\\LastNID", nidname.value, "REG_SZ");
+      ApplyFilter();
+      }
+   }
+
+</script>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ //button, input {background-color:white;}
+ a:link{text-decoration:none}
+ a:hover{text-decoration:none}
+ a:visited{text-decoration:none}
+ .tabgray {border:1px solid black;border-top:none;background-color:#cccccc;font-weight:bold;}
+ .tabon {border:1px solid black;border-top:none;background-color:#eeeeee;font-weight:bold;}
+ .taboff {border:1px solid gray dashed;border-top:none;background-color:#ffffff;font-weight:normal;}
+ .gradient {filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#000099,endColorstr=#ccccff)}
+</style>
+<META HTTP-EQUIV="MSTHEMECOMPATIBLE" CONTENT="yes">
+</head>
+<body id="gbody" style="background-color:#f1f1f1;margin-top:0;margin-right:0;" link=#999999 vlink=#999999 alink=#999999>
+
+<div class="gradient" style="position:absolute;left:0;top:0;width:550;height:60;background-color:#cbcbcb;color:#ffffff;padding:10;background-image:url(c:\header.gif)">Flatbyte's
+<div style="font-family:Trebuchet MS,Verdana;font-size:36px;font-weight:bold;filter:Glow(color=#000033,strength=5);width:100%">&raquo;Visual FastInst
+</div></div>
+<br><br><br><br><br><br><br style="line-height:6px">
+<table cellpadding=0 cellspacing=0 border=0 width=98%><tr><td width=50%>
+Rechner auf dem installiert werden soll:
+<input name="compname" size=35 value="">
+</td><td>
+Filter für Projektname:
+<input name="dbfilter" size=35 value="" title="Es wird nach Groß- und Kleinschreibung unterschieden!">
+<input type="button" value="Filtern" onClick="ApplyFilter();">
+</td></tr></table>
+
+Ausgewählte NetInstall Datenbank:<br>
+<select name="nidsel" OnChange="SelChangeNID();" style="width:150">
+<option value="">----->
+
+</select>
+<input name="nidname" size=60 value="" style="width:330" OnClick="nidsel.selectedIndex=0;SelChangeNID();" autocomplete>
+<input type="button" value="..." onClick="SelectFolder();">
+<br>
+
+<hr style="border:1px dotted #999999;height:1px">
+<table><tr><td>
+<select id="nidprj" size=17 style="width=400" OnDblClick="ShowPrj(this.selectedIndex)">
+
+</select>
+</td><td valign=bottom id="inptab" disabled>
+<input type=checkbox name="sortall" onClick="RefreshList();">Alle sortieren
+<input type=checkbox name="shhidden" onClick="RefreshList();" checked>Versteckte anzeigen
+<hr style="border:1px dotted #999999;height:1px">
+<input type=checkbox name="servinst">Per Service
+<input type=checkbox name="pollonly">Nächstes Polling
+<hr style="border:1px dotted #999999;height:1px">
+<input type=checkbox name="useniinst" onClick="AutoSetValues();" checked>NiInst32 benutzen
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type=checkbox name="uninstall"" onClick="AutoSetValues();">Deinstallieren
+<span style="font-family:Tahoma;padding:3;font-size:10px;color:#999999">
+<br><br>
+Bitte markieren Sie das gewünschte Projekt und klicken Sie dann FastInst!
+</span>
+<br><br>
+<input id="bSubmit" type="button" value="Installieren!" OnClick="DoFastInst();">
+</td></tr></table>
+<div id="info"></div>
+</body>
+<script>
+// autostart
+   compname.value=sLastTarget;
+   AutoSelectNiDb();
+   AutoSetValues();
+   PopulateSelectBox();
+   window.resizeTo(550,450);
+   nWin.close();
+</script>
+</html>
