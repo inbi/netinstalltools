@@ -1,0 +1,6 @@
+delete from niws_machineprojects
+delete from niws_mastercomponent
+delete from niws_projects
+delete from niws_folders
+delete from niws_nidatabases
+delete from niws_machines

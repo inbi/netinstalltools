@@ -1,0 +1,323 @@
+<html>
+<head>
+<hta:application id="nidimport" applicationname="nidimport" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="yes" sysmenu="yes" minimizebutton="yes" maximizebutton="no"
+single-instance="yes" icon="%windir%\system32\rsnotify.exe" version="1.0"
+/>
+<title>NID Importer</title>
+<script>
+// name: netinstall database (nid) importer
+// version: 1.0
+// autor: ingo bieneck (www.flatbyte.com)
+// last change: 08/2004
+
+
+var fso = new ActiveXObject("Scripting.FileSystemObject");
+sNiDatabaseGUID="";
+sNiDatabaseVersion="";
+
+// batchmodus?
+sCmdLine=nidimport.commandLine;
+sCmdParam= sCmdLine.substr(sCmdLine.indexOf(".hta")+7);
+// datum fuer logdatei-name
+date=new Date();
+if(parseInt(date.getMonth()+1)>9) sDate=(date.getMonth()+1);
+else sDate="0"+(date.getMonth()+1);
+sLogFileName = "nidimport."+date.getFullYear()+sDate+date.getDate()+".log";
+WriteLogEntry("---- Starting Log ----------------------------------------");
+
+
+function SelectFolder() {
+   var oShell = new ActiveXObject("Shell.Application");
+   var oFolder = oShell.BrowseForFolder(0, "Bitte wählen Sie ein Verzeichnis in dem sich die NetInstall Datenbank befindet.", 0);
+   if(oFolder!=null) {
+    oFolderItem = oFolder.Self;
+    var sSelPath=oFolderItem.Path+"\\nidb.nid";
+   
+   if(!fso.FileExists(sSelPath)) {
+      alert("In diesem Verzeichnis existiert keine NetInstall Datenbank.");
+      }
+    else {
+       nidname.innerText=sSelPath;
+       nidname.title=sSelPath;
+       ResetPrjList();
+       ReadNiDb(sSelPath);
+       inptab.disabled=false;
+      }
+   }
+}
+
+function ReadNiDb(sNidFile) {
+   oFile = new ActiveXObject("Scripting.FileSystemObject");
+   
+   if(!fso.FileExists(sNidFile)) {
+      if (!sCmdParam) alert("_"+sNidFile+"\nIn diesem Verzeichnis existiert keine NetInstall Datenbank.");
+      WriteLogEntry("Unable to find file "+sNidFile);
+      return;
+      }
+   inptab.disabled=false;
+   sNiDatabaseGUID="";
+
+   try {
+      oStream = oFile.OpenTextFile(sNidFile);
+      }
+   catch(e) {
+      if (!sCmdParam) alert(e.description); // nur wenn nicht im batchmodus.
+      return;
+      }
+
+   iCnt=0;
+   sFolder="";
+   
+   do {      
+      sToParse=oStream.ReadLine();
+
+      // "database"
+      if(sToParse.substr(0,13)=="$NIRT_VERSION") {
+         sNiDatabaseVersion=sToParse.substr(14);
+         }
+      if(sToParse.substr(0,4)=="GUID" && sNiDatabaseGUID=="") {
+         sNiDatabaseGUID=sToParse.substr(5);
+         }
+
+      // "folder"
+      if(sToParse.substr(0,1)=="&") {
+         sFolder="";
+         do {
+            sToParse2=oStream.ReadLine();
+            if(sToParse2.substr(0,4)=="GUID") sFolder=sToParse2.substr(5);
+            } while (!sToParse2=="")
+         sFolder+=sToParse.substr(1);
+         }
+
+      // "project"
+      if(sToParse.substr(0,1)=="~") {
+         sText=sToParse.substr(1);
+         sValue="";
+
+         do {
+            sToParse2=oStream.ReadLine();
+            if(sToParse2.substr(0,4)=="GUID") sValue+=sToParse2.substr(5);
+            if(sToParse2.substr(0,5)=="FLAGS") sValue+="|"+sToParse2.substr(6)+"|"+sFolder;
+            if(sToParse2.substr(0,4)=="0b32") sValue+="|"+sToParse2.substr(6);
+            } while (!sToParse2=="")
+
+         //if(sValue.indexOf("@HIDE") >0) sText+=" *";
+
+         if(sValue.indexOf("@HIDE") <=0 || shhidden.checked) {
+            var oOption = document.createElement("OPTION");
+            oOption.text=sText;
+            oOption.value=sValue;
+            nidprj.add(oOption);
+            iCnt++;
+            }
+         }
+
+   } while(!oStream.AtEndOfStream)
+   oStream.Close();
+
+   info.innerText=iCnt+" Projekte in Datenbank";
+}
+
+function RefreshList() {
+   if(sortall.checked) SortPrjList();
+   else { ResetPrjList(); ReadNiDb(nidname.value); }
+   }
+function SortPrjList() {
+   for(i=0;i<nidprj.length;i++) {
+      for(j=0;j<nidprj.length-1;j++) {
+         if(nidprj.children(i).text<nidprj.children(j).text) {
+            nidprj.children(i).swapNode(nidprj.children(j));
+            }
+         }
+      }
+   }
+
+function ResetPrjList() {
+	for(var i=nidprj.length-1; i>-1 ;i--) {
+		nidprj.remove(i);
+	}
+}
+
+function ShowPrj(i) {
+   sInfo=nidprj[i].text+"\n"+nidprj[i].value;
+   alert(sInfo);
+}
+
+function ImportDb(bAll) {
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oRecordset= new ActiveXObject("ADODB.Recordset");
+   var oCmd  = new ActiveXObject("ADODB.Command");
+   var iCountImport = 0;
+
+   oConnection.Open(connstr.value);
+   if(oConnection) {
+      //alert("connected!");
+      WriteLogEntry("Importing NetInstall Database "+nidname.value);
+
+      oCmd.ActiveConnection = oConnection;
+      info.innerHTML='<img src="C:/WINDOWS/PCHealth/HelpCtr/System/images/progbar.gif" height=13>'; 
+
+
+      // insert database (nid)
+      sSqlString="INSERT INTO NiWS_NiDatabases ( sNiDatabaseGUID, sNiDatabase, sNiDatabaseVersion) VALUES ('"+sNiDatabaseGUID+"', '"+nidname.value+"', '"+sNiDatabaseVersion+"')";
+      oCmd.CommandText = sSqlString;
+      try {
+         oCmd.Execute();
+         }
+      catch(e) {
+         // alert(nidname.value+":\n\n"+e.description);
+         WriteLogEntry("ERROR: Failed SQL: "+sSqlString);
+         }
+
+      for(var i=0; i<nidprj.length; i++) {
+         if(nidprj.options[i].selected || bAll) {
+            // insert into database
+            sGUID=nidprj.options[i].value.substr(0,38);
+            bHidden=0;
+            if(nidprj.options[i].value.indexOf("@HIDE") >0) bHidden=1;
+
+            sTmp=nidprj.options[i].value.substr(39);
+            sParam=sTmp.split("|"); // split parameters and components
+
+            sFolderGUID=sParam[1].substr(0,38);
+            sFolderName=sParam[1].substr(38);
+            if(sFolderGUID=="") sFolderGUID = sNiDatabaseGUID; // insert dbguid for rootfolder
+
+            //db inhalte loeschen
+            try {
+               sSqlString="DELETE FROM NiWS_Projects WHERE sProjectGUID ='"+sGUID+"'";
+               oCmd.CommandText = sSqlString;
+               oCmd.Execute();
+               sSqlString="DELETE FROM NiWS_MasterComponent WHERE sMasterGUID ='"+sGUID+"'";
+               oCmd.CommandText = sSqlString;
+               oCmd.Execute();
+               sSqlString="DELETE FROM NiWS_Folders WHERE sFolderGUID ='"+sFolderGUID+"'";
+               oCmd.CommandText = sSqlString;
+               oCmd.Execute();
+               }
+            catch(e) {
+               if (!sCmdParam) alert("Error deleting "+nidprj.options[i].text+":\n\n"+e.description); // nur wenn nicht im batchmodus.
+               WriteLogEntry("ERROR: Failed to delete old entries");
+               }
+
+            // insert project
+            sSqlString="INSERT INTO NiWS_Projects ( sProjectGUID, sProject, bHidden, sParameter, sFolderGUID ) VALUES ('"+sGUID+"','"+nidprj.options[i].text+"', '"+bHidden+"' , '"+sParam[0]+"', '"+sFolderGUID+"')";
+            //alert(sSqlString);
+            oCmd.CommandText = sSqlString;
+            WriteLogEntry("Insert project: "+sGUID+" "+nidprj.options[i].text);
+            iCountImport++;
+
+            try {
+               oCmd.Execute();
+               }
+            catch(e) {
+               if (!sCmdParam) alert(nidprj.options[i].text+":\n\n"+e.description); // nur wenn nicht im batchmodus.
+               WriteLogEntry("ERROR: Failed SQL: "+sSqlString);
+               }
+
+            // insert folder
+            if(sFolderGUID!="") {
+               sSqlString="INSERT INTO NiWS_Folders ( sFolderGUID, sFolderName, sNiDatabaseGUID) VALUES ('"+sFolderGUID+"', '"+sFolderName+"', '"+sNiDatabaseGUID+"')";
+               oCmd.CommandText = sSqlString;
+               try {
+                  oCmd.Execute();
+                  }
+               catch(e) {
+                  if (!sCmdParam) alert(nidprj.options[i].text+":\n\n"+e.description); // nur wenn nicht im batchmodus.
+                  WriteLogEntry("ERROR: Failed SQL: "+sSqlString);
+                  }
+               }
+
+             //insert master/component-mapping
+             for(j=2;j<sParam.length;j++) {
+               oCmd.CommandText = "INSERT INTO NiWS_MasterComponent (sMasterGUID, sComponentGUID) VALUES ('"+sGUID+"','"+sParam[j].substr(0,38)+"')";
+               try {
+                  oCmd.Execute();
+                  }
+               catch(e) {
+                  if (!sCmdParam) alert(nidprj.options[i].text+":\n\n"+e.description); // nur wenn nicht im batchmodus.
+                  WriteLogEntry("ERROR: Failed SQL: "+sSqlString);
+                  }
+               }
+            }
+         }
+      info.innerText="Importieren beendet.";
+      WriteLogEntry("Finished importing "+iCountImport+" NetInstall Projects.");
+      }
+
+   oConnection.Close();
+}
+
+function WriteLogEntry(s) {
+   // open/close fuer jeden logeintrag. zeitaufwendig, aber sicherer.
+   var oFSO = new ActiveXObject("Scripting.FileSystemObject");
+   var oFSOStream = oFSO.OpenTextFile(sLogFileName, 8, 1); // datei erstellen und anhaengen (create&append)
+   var d = new Date();
+   var sLog = d.toLocaleString()+" - "+s;
+   oFSOStream.WriteLine(sLog);
+   oFSOStream.Close();
+   }
+
+</script>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ //button, input {background-color:white;}
+ a:hover{color:#000000}
+ a:visited{color:#000000}
+ .tabgray {border:1px solid black;border-top:none;background-color:#cccccc;font-weight:bold;}
+ .tabon {border:1px solid black;border-top:none;background-color:#eeeeee;font-weight:bold;}
+ .taboff {border:1px solid gray dashed;border-top:none;background-color:#ffffff;font-weight:normal;}
+ .gradient {filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#000099,endColorstr=#ccccff)}
+</style>
+<META HTTP-EQUIV="MSTHEMECOMPATIBLE" CONTENT="yes">
+</head>
+<body id="gbody" onLoad="window.resizeTo(550,450);" style="background-color:#f1f1f1;margin-top:0;margin-right:0" link=#999999 vlink=#999999 alink=#999999>
+
+<div style="position:absolute;left:0;top:0;width:550;height:60;background-color:#cbcbcb;color:#ffffff;padding:10" class="gradient">FlatByte's
+<div style="font-family:Trebuchet MS,Verdana;font-size:36px;font-weight:bold;filter:Glow(color=#000000,strength=5);width:100%">Revulex NID Importer
+</div></div>
+<br><br><br><br><br><br>
+<br style="line-height:6px">
+Ausgewählte NetInstall Datenbank:<br>
+<input name="nidname" size=90 value="">
+<input type="button" value="..." onClick="SelectFolder();">
+<br>
+SQL Datenbank Verbindungsparameter:<br>
+<input name="connstr" size=90 value="DRIVER=SQL Server;SERVER=6790ibl;DATABASE=ni_webservice;User=sa;Password=sa;"> 
+<!-- <input name="connstr" size=90 value="Provider=SQLOLEDB;User ID=sa;Data Source=6790ibl;Initial Catalogue=ni_webservice;pwd=sa;"> //-->           
+
+<hr>
+<table><tr><td>
+<select id="nidprj" size=17 style="width=400" multiple OnDblClick="ShowPrj(this.selectedIndex)">
+
+</select>
+</td><td valign=bottom id="inptab" disabled>
+<input type=checkbox name="sortall" onClick="RefreshList();">Alle sortieren
+<input type=checkbox name="shhidden" onClick="RefreshList();" checked>Versteckte anzeigen
+<br><br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<input type="button" value="Importieren" OnClick="ImportDb();">
+</td></tr></table>
+
+<div style="bottom:2;left:2;position:absolute;color:#999999">
+&copy;2004 by <a href="http://www.flatbyte.com/?from=revulex" target=_new>flatbyte.com</a>. All Rights reserved. 
+</div>
+<div style="bottom:2;right:5;position:absolute;color:#999999" id="info">&nbsp;</span>
+
+</body>
+<script>
+// batchmode bei parameteruebergabe. alles importieren und automatisch beenden.
+if (sCmdParam) {
+   ResetPrjList();
+   nidname.innerText=sCmdParam;
+   ReadNiDb(sCmdParam);
+   ImportDb(1);
+   window.close();
+   }
+</script>
+</html>

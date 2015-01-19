@@ -1,0 +1,129 @@
+<html>
+<head><title>Revulex FAQ</title></head>
+<body>
+<font face="Trebuchet MS">
+<h2><u>FAQ für REVULEX</u></h2>
+
+<h4>Was ist REVULEX?</h4>
+<pre>
+REVULEX ist eine Lösung um Berechtigungen auf NetInstall Projekte ausserhalb
+des NetInstall Managers zu vergeben.
+
+Über den NetInstall Webservice werden die Berechtigungen der NetInstall-Projekte,
+d.h. der zu installierenden Software, von Gruppen oder Eigenschaften, welche in bisher
+in NetInstall festgelegt wurden, entkoppelt.
+Die Zuweisung der Berechtigungen erfolgt über eine externe Datenbasis, so dass bei
+Änderungen der Berechtigungen keine Änderungen in NetInstall erfolgen müssen.
+Daher müssen Mitarbeiter, z.B. vom UHD,  bei Berechtigungsänderungen nicht mehr den
+NetInstall-Manager starten.
+
+</pre>
+
+<h4>Was ist benötige ich dazu?</h4>
+<pre>
+Zuerst natürlich einmal eine funktionsfähige Installation von NetInstall. ;)
+Am Besten die Enterprise Edition davon.
+Ein Server mit installiertem IIS (für den Webservice)
+Dann die Dateien, die in der heruntergeladen Datei von REVULEX dabei waren.
+
+</pre>
+
+<h4>Wie wird das installiert?</h4>
+<pre>
+REVULEX kann und will keine fertige Lösung sein. D.h. einige Anpassungen sind
+vom NetInstall Administrator noch zu machen.
+Folgendes muss getan werden:
+
+-  revulex.asp auf einen IIS (z.b. in ein Unterverzeichnis) kopieren.
+
+-  Auf ORG-, OU- oder SITE-Ebene muß ein Webservice eingefügt werden.
+   (rechts klicken -> Einfügen -> Webservice)
+
+-  Webservice Settings editieren:
+   Clientfrage : http://youriis/revulex.asp?mode=client&pcname=%XNODE%
+   Managerfrage: http://youriis/revulex.asp?mode=mgr
+   (wobei "http://youiis" natürlich durch den IIS ersetzt werden muss, auf dem sich
+   der Webservice befindet. :-)
+
+   Das generierte XML File sieht dann folgendermassen aus:
+
+      &lt;?xml version="1.0" ?&gt;
+      &lt;LoginInformation&gt;
+        &lt;group&gt;Entwicklung &lt;/group&gt;
+        &lt;group&gt;Forschung &lt;/group&gt;
+      &lt;/LoginInformation&gt;
+
+-  Mit den mitgelieferten SQL-Scripts auf dem zustaendigen SQL Server (oder MSDE)
+   die Tabellen und Views anlegen.
+
+   Damit über den NetInstall Webservice die Projekt-Berechtigungen eigenstaendig
+   vergeben werden können, müssen die vorhandenen NetInstall Datenbanken über ein Tool
+   in eine SQL-fähige Datenbank importiert werden.
+   In der SQL-fähigen Datenbank werden, ausser den NetInstall-Projekten, -Ordnern und
+   -Datenbankinformationen auch eine Liste der zu verwaltenden Rechner geführt. 
+   Diese Rechnertabelle kann spaeter aus einer Configuration Database o.ae. kommen.
+   Ferner werden noch die Komponentenverknüpfungen und natürlich die eigentlichen 
+   Zuweisungen zwischen Maschine und Projekte in der Datenbank abgelegt.
+   
+-  Den mitgelieferten NID-Importer starten und die NetInstall-"Datenbank" importieren.
+   (normalerweise nidb.nid in \\server\netinstshare\install)
+   Hinweis:
+   Der NID-Importer kann auch im "batchmode" gestartet werden indem als
+   Parameter der volle Pfade zur importierenden NID angegeben wird. (auch UNC moeglich) 
+
+-  Das Importer Log kurz auf Fehler überprüfen.
+
+-  Die Anwendungen koennen dann mit dem Zuweisungstool REVULEX den jeweiligen Rechnern
+   zugewiesen werden. (Entweder werden die Rechner neu angelegt oder von einer anderen
+   Tabelle (z.B. OSD oder NetInventory) übernommen.
+
+-  Das Netinstall-Projekt muß dann zum guten Schluß noch auf den Webservice berechtigt werden.
+   Dieses Projekt wird dann auf den in der Datenbank zugewiesenen Clients installiert.
+   (Falls die Zuordnung gelöscht wird, wird das Paket automatisch deinstalliert.)
+
+</pre>
+<h4>SQL Connectionstring</h4> 
+<pre>
+Normalerweise wird folgender SQL-Connectionstring verwendet:
+<b>DRIVER=SQL Server;SERVER=serv01;DATABASE=webservice;User=sa;Password=sapwd;</b>
+<br>
+falls mit diesem Connectionstring keine Verbindung zustande kommt, dann probieren Sie mal diesen:
+<b>Provider=SQLOLEDB;Data Source=serv01;Initial Catalogue=webservice;User ID=sa;pwd=sapwd;</b>
+</pre>
+
+<h4>ACHTUNG</h4> 
+<pre>
+Es wird eine aktuelle NetInstall-Version vorausgesetzt, da es in der Version 5.7.809 (SP2)
+Probleme beim automatischen Deinstallieren gab! (z.B. ST7965)
+Also bitte an Netsupport/Enteo wenden und die neuste Version (kumulativ Patch) installieren.
+
+Es kann ebenso ein Fehler beim Starten auftreten, falls noch überhaupt kein Datensatz in den
+Tabellen für Revulex ist. Dies kann aber einfach, nach der Fehlermedldung, durch Einfügen eines
+Rechners behoben werden.
+</pre>
+
+<h4>Schlußbemerkung</h4> 
+<pre>
+Das "Produkt" ist soll keine Fertiglösung sein, sondern vielmehr den Weg zeigen wie die
+Berechtigungen vom NetInstall Manager entkoppelt werden koennen.
+Deswegen ist es auch kein Vollpreisprodukt, sondern lebt von freiwilligen Spenden.
+Wer dieses Produkt weiterentwickelt und produktiv einsetzt kann mir einen Obulus
+nach freier Wahl zukommen lassen. :)
+</pre>
+
+<h4>Der (un-)übliche Disclaimer</h4>
+<pre>
+We don't claim REVULEX is good for anything -- if you think it is, great, but it's up to you to decide.
+If REVULEX doesn't work, tough. We reserve the right to do the absolute minimum provided by law,
+up to and including "nothing". This is basically the same disclaimer that comes with all software
+packages but ours is in English and theirs is in legalese. :-)
+
+</pre>
+
+
+
+&copy 2004/2005 by Ingo Bieneck, FlatByte IT-Consulting (<a href="http://www.flatbyte.com">www.flatbyte.com</a>)
+</font>
+</body>
+</html>
+

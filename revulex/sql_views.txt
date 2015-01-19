@@ -1,0 +1,113 @@
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_DatabaseFolders]') and OBJECTPROPERTY(id, N'IsView') = 1)
+drop view [dbo].[NiWS_DatabaseFolders]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_FolderProjects]') and OBJECTPROPERTY(id, N'IsView') = 1)
+drop view [dbo].[NiWS_FolderProjects]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_MachineProjectsView]') and OBJECTPROPERTY(id, N'IsView') = 1)
+drop view [dbo].[NiWS_MachineProjectsView]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_MasterComponentView]') and OBJECTPROPERTY(id, N'IsView') = 1)
+drop view [dbo].[NiWS_MasterComponentView]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_ProjectsDatabaseView]') and OBJECTPROPERTY(id, N'IsView') = 1)
+drop view [dbo].[NiWS_ProjectsDatabaseView]
+GO
+
+SET QUOTED_IDENTIFIER ON 
+GO
+SET ANSI_NULLS ON 
+GO
+
+CREATE VIEW dbo.NiWS_DatabaseFolders
+AS
+SELECT     TOP 100 PERCENT dbo.NiWS_Folders.sFolderName, dbo.NiWS_NiDatabases.sNiDatabase
+FROM         dbo.NiWS_Folders INNER JOIN
+                      dbo.NiWS_NiDatabases ON dbo.NiWS_Folders.sNiDatabaseGUID = dbo.NiWS_NiDatabases.sNiDatabaseGUID
+ORDER BY dbo.NiWS_NiDatabases.sNiDatabase, dbo.NiWS_Folders.sFolderName
+
+GO
+SET QUOTED_IDENTIFIER OFF 
+GO
+SET ANSI_NULLS ON 
+GO
+
+SET QUOTED_IDENTIFIER ON 
+GO
+SET ANSI_NULLS ON 
+GO
+
+CREATE VIEW dbo.NiWS_FolderProjects
+AS
+SELECT     TOP 100 PERCENT dbo.NiWS_Folders.sFolderName, dbo.NiWS_Projects.sProject
+FROM         dbo.NiWS_Projects INNER JOIN
+                      dbo.NiWS_Folders ON dbo.NiWS_Projects.sFolderGUID = dbo.NiWS_Folders.sFolderGUID
+ORDER BY dbo.NiWS_Folders.sFolderName
+
+GO
+SET QUOTED_IDENTIFIER OFF 
+GO
+SET ANSI_NULLS ON 
+GO
+
+SET QUOTED_IDENTIFIER ON 
+GO
+SET ANSI_NULLS ON 
+GO
+
+CREATE VIEW dbo.NiWS_MachineProjectsView
+AS
+SELECT     TOP 100 PERCENT dbo.NiWS_Machines.sMachineName, dbo.NiWS_Projects.sProject, dbo.NiWS_MachineProjects.sProjectGUID
+FROM         dbo.NiWS_Machines INNER JOIN
+                      dbo.NiWS_MachineProjects ON dbo.NiWS_Machines.sMachineGUID = dbo.NiWS_MachineProjects.sMachineGUID INNER JOIN
+                      dbo.NiWS_Projects ON dbo.NiWS_MachineProjects.sProjectGUID = dbo.NiWS_Projects.sProjectGUID
+ORDER BY dbo.NiWS_Machines.sMachineName
+
+GO
+SET QUOTED_IDENTIFIER OFF 
+GO
+SET ANSI_NULLS ON 
+GO
+
+SET QUOTED_IDENTIFIER ON 
+GO
+SET ANSI_NULLS ON 
+GO
+
+CREATE VIEW dbo.NiWS_MasterComponentView
+AS
+SELECT     TOP 100 PERCENT dbo.NiWS_Projects.sProject AS sMaster, NiWS_Projects_1.sProject AS sComponent
+FROM         dbo.NiWS_Projects INNER JOIN
+                      dbo.NiWS_MasterComponent ON dbo.NiWS_Projects.sProjectGUID = dbo.NiWS_MasterComponent.sMasterGUID INNER JOIN
+                      dbo.NiWS_Projects NiWS_Projects_1 ON dbo.NiWS_MasterComponent.sComponentGUID = NiWS_Projects_1.sProjectGUID
+ORDER BY dbo.NiWS_Projects.sProject
+
+GO
+SET QUOTED_IDENTIFIER OFF 
+GO
+SET ANSI_NULLS ON 
+GO
+
+SET QUOTED_IDENTIFIER ON 
+GO
+SET ANSI_NULLS ON 
+GO
+
+CREATE VIEW dbo.NiWS_ProjectsDatabaseView
+AS
+SELECT     TOP 100 PERCENT dbo.NiWS_Projects.sProjectGUID, dbo.NiWS_Projects.sProject, dbo.NiWS_NiDatabases.sNiDatabaseGUID
+FROM         dbo.NiWS_Folders INNER JOIN
+                      dbo.NiWS_NiDatabases ON dbo.NiWS_Folders.sNiDatabaseGUID = dbo.NiWS_NiDatabases.sNiDatabaseGUID INNER JOIN
+                      dbo.NiWS_Projects ON dbo.NiWS_Folders.sFolderGUID = dbo.NiWS_Projects.sFolderGUID
+ORDER BY dbo.NiWS_Projects.sProject
+
+GO
+SET QUOTED_IDENTIFIER OFF 
+GO
+SET ANSI_NULLS ON 
+GO
+

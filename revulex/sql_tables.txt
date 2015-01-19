@@ -1,0 +1,89 @@
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[FK_NiWS_Projects_NiWS_Folders]') and OBJECTPROPERTY(id, N'IsForeignKey') = 1)
+ALTER TABLE [dbo].[NiWS_Projects] DROP CONSTRAINT FK_NiWS_Projects_NiWS_Folders
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[FK_NiWS_MachineProjects_NiWS_Machines]') and OBJECTPROPERTY(id, N'IsForeignKey') = 1)
+ALTER TABLE [dbo].[NiWS_MachineProjects] DROP CONSTRAINT FK_NiWS_MachineProjects_NiWS_Machines
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[FK_NiWS_Folders_NiWS_NiDatabases]') and OBJECTPROPERTY(id, N'IsForeignKey') = 1)
+ALTER TABLE [dbo].[NiWS_Folders] DROP CONSTRAINT FK_NiWS_Folders_NiWS_NiDatabases
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[FK_NiWS_MachineProjects_NiWS_Projects]') and OBJECTPROPERTY(id, N'IsForeignKey') = 1)
+ALTER TABLE [dbo].[NiWS_MachineProjects] DROP CONSTRAINT FK_NiWS_MachineProjects_NiWS_Projects
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[FK_NiWS_MasterComponent_NiWS_Projects]') and OBJECTPROPERTY(id, N'IsForeignKey') = 1)
+ALTER TABLE [dbo].[NiWS_MasterComponent] DROP CONSTRAINT FK_NiWS_MasterComponent_NiWS_Projects
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[FK_NiWS_MasterComponent_NiWS_Projects1]') and OBJECTPROPERTY(id, N'IsForeignKey') = 1)
+ALTER TABLE [dbo].[NiWS_MasterComponent] DROP CONSTRAINT FK_NiWS_MasterComponent_NiWS_Projects1
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_Folders]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+drop table [dbo].[NiWS_Folders]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_MachineProjects]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+drop table [dbo].[NiWS_MachineProjects]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_Machines]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+drop table [dbo].[NiWS_Machines]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_MasterComponent]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+drop table [dbo].[NiWS_MasterComponent]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_NiDatabases]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+drop table [dbo].[NiWS_NiDatabases]
+GO
+
+if exists (select * from dbo.sysobjects where id = object_id(N'[dbo].[NiWS_Projects]') and OBJECTPROPERTY(id, N'IsUserTable') = 1)
+drop table [dbo].[NiWS_Projects]
+GO
+
+CREATE TABLE [dbo].[NiWS_Folders] (
+	[sFolderGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[sFolderName] [varchar] (50) COLLATE Latin1_General_CI_AS NULL ,
+	[sNiDatabaseGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL 
+) ON [PRIMARY]
+GO
+
+CREATE TABLE [dbo].[NiWS_MachineProjects] (
+	[sMachineGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[sProjectGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL 
+) ON [PRIMARY]
+GO
+
+CREATE TABLE [dbo].[NiWS_Machines] (
+	[sMachineGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[sMachineName] [varchar] (50) COLLATE Latin1_General_CI_AS NOT NULL 
+) ON [PRIMARY]
+GO
+
+CREATE TABLE [dbo].[NiWS_MasterComponent] (
+	[sMasterGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[sComponentGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL 
+) ON [PRIMARY]
+GO
+
+CREATE TABLE [dbo].[NiWS_NiDatabases] (
+	[sNiDatabaseGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[sNiDatabase] [varchar] (300) COLLATE Latin1_General_CI_AS NULL ,
+	[sNiDatabaseVersion] [int] NOT NULL 
+) ON [PRIMARY]
+GO
+
+CREATE TABLE [dbo].[NiWS_Projects] (
+	[sProjectGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[sProject] [varchar] (80) COLLATE Latin1_General_CI_AS NOT NULL ,
+	[bHidden] [tinyint] NULL ,
+	[sParameter] [varchar] (100) COLLATE Latin1_General_CI_AS NULL ,
+	[sFolderGUID] [varchar] (40) COLLATE Latin1_General_CI_AS NULL 
+) ON [PRIMARY]
+GO
+

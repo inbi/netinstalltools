@@ -1,0 +1,505 @@
+<html>
+<head>
+<hta:application id="revulex" applicationname="revulex" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="yes" sysmenu="yes" minimizebutton="yes" maximizebutton="no"
+single-instance="yes" icon="%windir%\system32\rtcshare.exe" version="1.0"
+/>
+<title>Revulex for NetInstall</title>
+<script>
+
+//var oConnection= new ActiveXObject("ADODB.Connection");
+//var oRecordset= new ActiveXObject("ADODB.Recordset");
+//var oCmd  = new ActiveXObject("ADODB.Command");
+var wsh = new ActiveXObject("WScript.Shell");
+
+try {
+   var sSqlCS=wsh.RegRead("HKCU\\Software\\Flatbyte\\Revulex\\SqlConnStr");
+   }
+catch(e) {
+   sSqlCS="DRIVER=SQL Server;SERVER=w6790ibl;DATABASE=ni_webservice;User=sa;Password=sa;";
+   }
+try {
+   var sOsdCS=wsh.RegRead("HKCU\\Software\\Flatbyte\\Revulex\\OsdConnStr");
+   }
+catch(e) {
+   sOsdCS="DRIVER=SQL Server;SERVER=w6790ibl;DATABASE=ni_webservice;User=sa;Password=sa;";
+   }
+
+
+function InsertMachine() {
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oCmd  = new ActiveXObject("ADODB.Command");
+
+   oConnection.Open(connstr.value);
+   if(oConnection) {
+      oCmd.ActiveConnection = oConnection;
+      sSqlString="INSERT INTO NiWS_Machines (sMachineGUID, sMachineName) VALUES ('"+mguid.value+"', '"+mname.value+"')";
+      oCmd.CommandText = sSqlString;
+      try {
+         oCmd.Execute();
+         }
+      catch(e) {
+         alert(e.description);
+         }
+      oConnection.Close();
+      }
+   ResetPCList();
+   FillPCSelection();
+   }
+
+function DeleteMachine() {
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oCmd  = new ActiveXObject("ADODB.Command");
+
+   if(confirm("Gewählten Rechner wirklich löschen?")) {
+      oConnection.Open(connstr.value);
+      if(oConnection) {
+         oCmd.ActiveConnection = oConnection;
+         sSqlString="DELETE FROM NiWS_Machines WHERE sMachineGUID ='"+dpc.options[dpc.options.selectedIndex].value+"'";
+         oCmd.CommandText = sSqlString;
+         try {
+            oCmd.Execute();
+            }
+         catch(e) {
+            alert(e.description);
+            }
+         oConnection.Close();
+         }
+      ResetPCList();
+      FillPCSelection();
+      }
+   }
+
+function ReadSqlDb() {
+   ShowTab(0);
+   ResetPCList();
+   ResetNiDbList();
+   try {
+     FillDbSelection();
+     FillPCSelection();
+     ReReadSqlDb();
+      }
+   catch(e) {
+      alert("D'oh! Ein Datenbankfehler ist aufgetreten.\n\n"+e.description+"\n\nMögliche Ursachen:\nDatenbank nicht erreichbar oder falsche Anmeldeinformationen.");
+      }
+   //assign.disabled=true;
+   //ShowTab(1);
+   }
+
+function ReReadSqlDb() {
+   ResetPrjLists();
+   FillPrjSelection();
+   if (chksort.checked) SortPrjLists();
+   chkdb.checked? db.disabled=true: db.disabled=false;
+   PrintPc();
+   assign.disabled=true;
+   InfChgApp.innerHTML='';
+   ShowTab(1);
+   }
+
+
+function FillDbSelection() {
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oRecordset= new ActiveXObject("ADODB.Recordset");
+
+   oConnection.Open(connstr.value);
+   oRecordset.Open("SELECT * FROM NiWS_NiDatabases order by sNiDatabase", oConnection);
+   while (!oRecordset.EOF) {
+      var oOption = document.createElement("OPTION");
+      oOption.text=oRecordset("sNiDatabase");
+      oOption.value=oRecordset("sNiDatabaseGUID");
+      db.add(oOption);
+      oRecordset.MoveNext();
+      }
+   oRecordset.Close();
+   oConnection.Close();
+   }
+
+function FillPCSelection() {
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oRecordset= new ActiveXObject("ADODB.Recordset");
+
+   oConnection.Open(connstr.value);
+   oRecordset.Open("SELECT * FROM NiWS_Machines ORDER BY sMachineName", oConnection);
+   while (!oRecordset.EOF) {
+      var oOption= document.createElement("OPTION");
+      var oOption2= document.createElement("OPTION");
+      oOption.text=oOption2.text=oRecordset("sMachineName");
+      oOption.value=oOption2.value=oRecordset("sMachineGUID");
+      dpc.add(oOption2);
+      pc.add(oOption);
+      oRecordset.MoveNext();
+      }
+   oRecordset.Close();
+   oConnection.Close();
+
+   }
+
+function FillPrjSelection() {
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oRecordset= new ActiveXObject("ADODB.Recordset");
+
+   oConnection.Open(connstr.value);
+   sSqlString="SELECT * FROM NiWS_ProjectsDatabaseView";
+   if(!chkdb.checked) sSqlString+=" WHERE sNiDatabaseGUID = '"+db.options[db.options.selectedIndex].value+"'";
+   sSqlString+=" ORDER BY sProject";
+   oRecordset.Open(sSqlString, oConnection);
+   while (!oRecordset.EOF) {
+      var oOption = document.createElement("OPTION");
+      oOption.text=oRecordset("sProject");
+      var sCurPrjGUID=oOption.value=oRecordset("sProjectGUID");
+      // check if project is already assigned
+      if (chkassign.checked) {
+         var oRecordset2= new ActiveXObject("ADODB.Recordset");
+         sSql2 = "SELECT COUNT(*) FROM NiWS_MachineProjects WHERE sProjectGUID ='"+sCurPrjGUID+"' and sMachineGUID='"+pc.options[pc.options.selectedIndex].value+"'";
+         oRecordset2.Open(sSql2, oConnection);
+         if(parseInt(oRecordset2(0))>0) selprj.add(oOption);
+         else prj.add(oOption);
+         oRecordset2.Close();
+         }
+      else {
+         prj.add(oOption);
+         }
+      oRecordset.MoveNext();
+      }
+   oRecordset.Close();
+   oConnection.Close();
+   }
+
+function AddAssigned() {
+   for(var i=0; i<prj.length; i++) {
+      if(prj.options[i].selected) {
+         var oOption = document.createElement("OPTION");
+         oOption.text=prj.options[i].text;
+         oOption.value=prj.options[i].value;
+         selprj.add(oOption);
+         }
+      }
+   for(var i=prj.length-1; i>-1 ;i--) {
+      if(prj.options[i].selected) {
+         prj.remove(i);
+         }
+      }
+   if (chksort.checked) SortPrjLists();
+   assign.disabled=false;
+   InfChgApp.innerHTML='(<b style="color:red;">geändert</b>)';
+   }
+
+function RemoveAssigned() {
+   for(var i=0; i<selprj.length; i++) {
+      if(selprj.options[i].selected) {
+         var oOption = document.createElement("OPTION");
+         oOption.text=selprj.options[i].text;
+         oOption.value=selprj.options[i].value;
+         prj.add(oOption);
+         }
+      }
+   for(var i=selprj.length-1; i>-1 ;i--) {
+      if(selprj.options[i].selected) {
+         selprj.remove(i);
+         }
+      }
+   if (chksort.checked) SortPrjLists();
+   assign.disabled=false;
+   InfChgApp.innerHTML='(<b style="color:red;">geändert</b>)';
+   }
+
+function ResetPrjLists() {
+	for(var i=prj.length-1; i>-1 ;i--) {
+		prj.remove(i);
+	}
+	for(var i=selprj.length-1; i>-1 ;i--) {
+		selprj.remove(i);
+	}
+}
+
+function ResetPCList() {
+	for(var i=pc.length-1; i>-1 ;i--) {
+		pc.remove(i);
+      dpc.remove(i);
+	}
+}
+
+function ResetNiDbList() {
+	for(var i=db.length-1; i>-1 ;i--) {
+		db.remove(i);
+	}
+}
+
+function PrintPc() {
+   sPcName.innerHTML="<b>"+pc.options[pc.options.selectedIndex].text+" ("+pc.options[pc.options.selectedIndex].value+")</b>";   
+}
+
+function SortPrjLists() {
+   for(i=0;i<prj.length;i++) {
+      for(j=0;j<prj.length-1;j++) {
+         if(prj.children(i).text<prj.children(j).text) {
+            prj.children(i).swapNode(prj.children(j));
+            }
+         }
+      }
+   for(i=0;i<selprj.length;i++) {
+      for(j=0;j<selprj.length-1;j++) {
+         if(selprj.children(i).text<selprj.children(j).text) {
+            selprj.children(i).swapNode(selprj.children(j));
+            }
+         }
+      }
+}
+
+function AssignProjects() {
+   sMGUID=pc.options[pc.options.selectedIndex].value;
+
+   var oConnection= new ActiveXObject("ADODB.Connection");
+   var oCmd  = new ActiveXObject("ADODB.Command");
+
+   oConnection.Open(connstr.value);
+   if(oConnection) {
+      oCmd.ActiveConnection = oConnection;
+
+      try {
+         sSqlString="DELETE FROM NiWS_MachineProjects WHERE sMachineGUID ='"+sMGUID+"'";
+         oCmd.CommandText = sSqlString;
+         oCmd.Execute();
+         }
+      catch(e) {;}
+
+      for(var i=0; i<selprj.length; i++) {
+         sSqlString="INSERT INTO NiWS_MachineProjects (sMachineGUID, sProjectGUID) VALUES ('"+sMGUID+"', '"+selprj.options[i].value+"')";
+         oCmd.CommandText = sSqlString;
+         try {
+            oCmd.Execute();
+            }
+         catch(e) {
+            alert(e.description);
+            }
+         }
+
+      oConnection.Close();
+      }
+   //alert("Neu gewählte Anwendungen zugewiesen!\nBisher zugewiesene Anwendungen wurden entfernt!");
+   if(!chkassign.checked) { //falls nicht gesetzt
+      InfChgApp.innerHTML='';
+      }
+   else {
+      InfChgApp.innerHTML='(eingetragen)';    
+      assign.disabled=true;
+      }
+   }
+
+function WriteOSD() {
+   if(confirm("Achtung! Alle Daten auf dem Rechner werden gelöscht!\nWollen Sie den Rechner wirklich neu aufsetzen?")) {
+      // osdpart, osdformat, osdsetup, osdtechdata setzen.
+
+      var oConnection= new ActiveXObject("ADODB.Connection");
+      var oCmd  = new ActiveXObject("ADODB.Command");
+   
+      oConnection.Open(osdconnstr.value);
+      if(oConnection) {
+         oCmd.ActiveConnection = oConnection;
+         sSqlString="UPDATE bc_Computer set Partitioning='"
+         osdpart.checked? sSqlString+="1', " : sSqlString+="0', ";         
+         osdformat.checked? sSqlString+="Formatting='1', " : sSqlString+="Formatting='0', ";         
+         osdsetup.checked? sSqlString+="Setup='1', " : sSqlString+="Setup='0', ";         
+         osdtechdata.checked? sSqlString+="TechData='1', " : sSqlString+="TechData='0', ";         
+         sSqlString+="FormatString='c:', Status='2', LastChange=getdate() WHERE HostName = '"+pc.options[pc.options.selectedIndex].text+"'";
+         //alert(sSqlString);
+         oCmd.CommandText = sSqlString;
+         try {
+            oCmd.Execute();
+            }
+         catch(e) {
+            alert(e.description);
+            }
+         oConnection.Close();
+         }
+      }
+   }
+
+function ShowTab(i) {
+   tab1.className=tab2.className=tab3.className=tab4.className='taboffPNG';
+   cont0.style.display=cont1.style.display=cont2.style.display=cont3.style.display=cont4.style.display='none';
+   switch(i) {
+      case 0:  cont0.style.display='';
+               break;
+      default:
+      case 1:  cont1.style.display='';
+               tab1.className='tabonPNG';
+               break;
+      case 2:  cont2.style.display='';
+               tab2.className='tabonPNG';
+               break;
+      case 3:  cont3.style.display='';
+               tab3.className='tabonPNG';
+               break;
+      case 4:  cont4.style.display='';
+               tab4.className='tabonPNG';
+               break;
+      }
+   }
+
+function autostart() {
+   if(confirm("Datenbank einlesen?")) {
+      ReadSqlDb();}
+   ShowTab(1);
+   tab1.className='tabonPNG'
+   }
+
+function ShowConns() {
+   if(chkcon.checked) {
+      if(prompt("Bitte Passwort eingeben")=="revulex") {
+         connstr.style.visibility='visible';
+         osdconnstr.style.visibility='visible';
+         fsave.style.display='';
+         }
+      else
+         chkcon.checked=false;
+      }
+   else {
+      connstr.style.visibility='hidden';
+      osdconnstr.style.visibility='hidden';
+      fsave.style.display='none';
+      }
+   }
+function SaveConns() {
+   var bReg=wsh.RegWrite("HKCU\\Software\\Flatbyte\\Revulex\\SqlConnStr", connstr.value , "REG_SZ");
+   var cReg=wsh.RegWrite("HKCU\\Software\\Flatbyte\\Revulex\\OsdConnStr", osdconnstr.value , "REG_SZ");
+   if(bReg||cReg) alert("Fehler beim Speichern der Verbindungsparameter");
+   }
+
+</script>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ //button, input {background-color:white;}
+ a:hover{color:#000000}
+ a:visited{color:#000000}
+ .tabgray {border:1px solid black;border-top:none;background-color:#cccccc;font-weight:bold;}
+ .tabon {border:1px solid black;border-top:none;background-color:#eeeeee;font-weight:bold;}
+ .taboff {border:1px solid gray dashed;border-top:none;background-color:#ffffff;font-weight:normal;}
+ .tabonPNG {border:0px solid black;border-bottom:none;background-color:#eeeeee;font-weight:normal;background-image:url(./tab.active.png);padding-top:2;padding-bottom:2}
+ .taboffPNG {border:0px solid gray dashed;border-bottom:none;background-color:#ffffff;font-weight:normal;background-image:url(./tab.png);padding-top:2;padding-bottom:2}
+ .tabhoverPNG {border:0px solid gray dashed;border-bottom:none;background-color:#ffffff;font-weight:normal;background-image:url(./tab.hover.png)}
+ .gradient {filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#000099,endColorstr=#ccccff)}
+</style>
+<META HTTP-EQUIV="MSTHEMECOMPATIBLE" CONTENT="yes">
+</head>
+<body id="gbody" onLoad="window.resizeTo(620,525);autostart();" style="background-color:#f1f1f1;margin-top:0;background-image:url(./bg.jpg)"" link=#999999 vlink=#999999 alink=#999999>
+<div style="position:absolute;left:0;top:0;width:620;height:60;background-color:#cbcbcb;color:#ffffff;padding:10" class="gradient">Flatbyte's
+<div style="font-family:Trebuchet MS,Verdana;font-size:36px;font-weight:bold;filter:Glow(color=#000000,strength=5);width:100%">Revulex for NetInstall
+</div></div>
+<br><br><br><br><br><br>
+<br style="line-height:6px">
+
+<table><tr>
+<td id="tab1" class="taboffPNG" OnMouseOver=cn=this.className;this.className='tabhoverPNG' OnMouseOut=this.className=cn OnClick=ShowTab(1);cn=this.className='tabonPNG'>&nbsp;Zuweisung&nbsp;</td>
+<td id="tab2" class="taboffPNG" OnMouseOver=cn=this.className;this.className='tabhoverPNG' OnMouseOut=this.className=cn OnClick=ShowTab(2);cn=this.className='tabonPNG'>&nbsp;OSD&nbsp;</td>
+<td id="tab3" class="taboffPNG" OnMouseOver=cn=this.className;this.className='tabhoverPNG' OnMouseOut=this.className=cn OnClick=ShowTab(3);cn=this.className='tabonPNG'>&nbsp;SQL Server&nbsp;</td>
+<td id="tab4" class="taboffPNG" OnMouseOver=cn=this.className;this.className='tabhoverPNG' OnMouseOut=this.className=cn OnClick=ShowTab(4);cn=this.className='tabonPNG'>&nbsp;Extras&nbsp;</td>
+</tr></table>
+<div style="border:1px solid gray; width:100%;height=78%;padding:5;background-color:#fefefe;filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#ffffff,endColorstr=#efedde)">
+
+<div id="cont0">
+<span id="dbread">Bitte warten Sie...</span><br>
+<img src="c:/windows/PCHealth/HelpCtr/System/images/progbar.gif">
+</div>
+
+<div id="cont3" style="display:none">
+<input id="chkcon" type=checkbox onpropertychange="ShowConns();">Verbindungsparameter anzeigen/ändern
+<fieldset style="padding:5"><legend>
+SQL Datenbank Verbindungsparameter:</legend>
+<script>
+ document.write("<input name='connstr' style='visibility:hidden' size=98 value='"+sSqlCS+"'>");
+</script>
+<br><input type=button id="changesrv" value="Datenbank erneut einlesen" onClick="ReadSqlDb();">
+</fieldset>
+<fieldset style="padding:5"><legend>
+OSD Datenbank Verbindungsparameter:</legend>
+<script>
+ document.write("<input name='osdconnstr' style='visibility:hidden' size=98 value='"+sOsdCS+"'>");
+</script>
+</fieldset>
+<fieldset id="fsave" style="display:none;padding:5"><legend>
+Speichern</legend>
+<input type=button onClick="SaveConns();" value="Verbindungsparameter speichern">
+
+</div>
+
+<div id="cont4" style="display:none">
+<fieldset style="padding:5"><legend>Rechner einfügen</legend>
+GUID: <input name="mguid" size=39>
+&nbsp;&nbsp;
+Name: <input name="mname" size=30>
+<input type=button id="insertpc" value="Einfügen" onClick="InsertMachine();">
+</fieldset>
+<fieldset style="padding:5"><legend>Rechner löschen</legend>
+<select id="dpc" style="width:250"></select>
+<input type=button id="deletepc" value="Löschen" onClick="DeleteMachine();">
+</fieldset>
+
+<fieldset style="padding:5"><legend>Benutzeroptionen</legend>
+<input type=checkbox id="chksort">Sortierte Anzeige der verfügbaren Projekte (<a href="#" title="Sortieren der Anzeige kann, bei vielen Projekten, sehr zeitintensiv sein und ist anhängig von der Rechnergeschwindigkeit!">Hinweis</a>)
+<br><input type=checkbox id="chkassign" onClick="if(chkassign.checked) ReReadSqlDb();" checked>Aktuelle Zuweisungen anzeigen (<a href="#" title="Diesen Punkt ausschalten, wenn Sie dieselben Anwendungen mehreren Rechnern zuweisen möchten.">Hinweis</a>)
+<hr noshade style="height:1px">
+Ausgewählte Datenbank  (<a href="#" title="Wenn nicht alle Datenbanken ausgewählt werden bezieht sich die Ansicht immer nur auf die jeweils gewählte Datenbank!">Hinweis</a>)<br>
+<select id="db" style="width:250" onChange="ReReadSqlDb();"></select>
+<input type=checkbox id="chkdb" onClick="ReReadSqlDb();" checked>Alle Datenbanken benutzen
+
+</fieldset>
+
+</div>
+
+<div id="cont1" style="display:none">
+<fieldset style="padding:5"><legend>Anwendungen zuweisen</legend>
+
+<table><tr><td>
+Rechner auswählen:</td><td>
+<select id="pc" style="width:250" onChange="if(chkassign.checked) ReReadSqlDb();"></select>
+</td><td>
+&nbsp;&nbsp;<input type=button id="assign" value="Anwendungen zuweisen" onClick="AssignProjects()" disabled>
+</td></tr>
+</table>
+<hr noshade style="height:1px">
+<table><tr><td>
+Verfügbare Anwendungen
+<br>
+<select id="prj" size=20 style="width:262" multiple></select>
+</td><td>
+<input type=button value="&gt;&gt;" onClick="AddAssigned()">
+<br>
+<input type=button value="&lt;&lt;" onClick="RemoveAssigned()">
+<br><br>
+</td><td>
+Zugewiesene Anwendungen <span id="InfChgApp"></span>
+<br>
+<select id="selprj" size=20 style="width:262" multiple></select>
+</td><td>
+</tr></table>
+</fieldset>
+</div>
+
+<div id="cont2" style="display:none">
+<fieldset style="padding:5"><legend>OSD Optionen</legend>
+<br style="line-height:0.5">
+<span style="border:2px dashed #cccccc;padding:3;width:100%;background-color:#ffffff">Rechner&nbsp;<span id="sPcName"></span></span>
+<fieldset style="padding:5"><legend>
+<input type=checkbox id="osdreset" checked disabled>Rechner per OSD zurücksetzen
+</legend>
+<input type=checkbox id="osdpart" checked>Rechner partitionieren
+<br><input type=checkbox id="osdformat" checked>Rechner formatieren
+<br><input type=checkbox id="osdsetup" checked>Anwendungen installieren
+<br><input type=checkbox id="osdtechdata" checked>Technische Daten einlesen
+<hr noshade style="height:1px">
+<input type=button value="Plätten!" onClick="WriteOSD();">
+</fieldset>
+</fieldset>
+</div>
+
+</div>
+
+<div style="bottom:2;left:2;position:absolute;color:#999999">
+&copy;2004/2005 by <a href="http://www.flatbyte.com?from=revulex" target=_zz>flatbyte.com</a>. All Rights reserved.
+</div>
+</body>
+</html>
+
