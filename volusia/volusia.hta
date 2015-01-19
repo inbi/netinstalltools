@@ -1,0 +1,476 @@
+<html>
+<head>
+<hta:application id="volusia" applicationname="volusia" border="dialog" borderstyle="normal"  innerborder="no" scroll="no" selection="no"
+caption="yes" showintaskbar="yes" contextmenu="yes" sysmenu="yes" minimizebutton="yes" maximizebutton="no" application="yes"
+single-instance="yes" icon="volusia.ico" version="1.0"
+/>
+<title>Volusia - NetInstall Servermanagement</title>
+<script>
+// (c)2005, by Ingo Bieneck (www.flatbyte.com)
+
+window.resizeTo(794,572);
+var fso=new ActiveXObject("Scripting.FileSystemObject");
+var wsh=new ActiveXObject("WScript.Shell");
+
+var envTemp=wsh.ExpandEnvironmentStrings("%temp%");
+var sDefaultXMLFilename="export.xml";
+
+function parseXML(pathXMLFile) {
+   //alert(pathXMLFile);
+   var xmlDoc = new ActiveXObject("Microsoft.XMLDOM");
+   var nodeList, k;
+   xmlDoc.async = false;
+   xmlDoc.resolveExternals = false;
+   try {
+      xmlDoc.load(pathXMLFile);
+      clearServerList();
+
+      nodeList = xmlDoc.documentElement.getElementsByTagName("NCPObject");
+      for (var i=0; i<nodeList.length; i++) {
+         for (var j=0; j<nodeList.item(i).attributes.length; j++) {
+            if(nodeList.item(i).attributes(j).text=="SERVER") {
+               addToServerList(nodeList.item(i).attributes(0).text, nodeList.item(i).childNodes.item(0).attributes(0).text)
+               }
+            }
+        }
+      // sortieren
+      for(i=0;i<srvList.length;i++) {
+         for(j=0;j<srvList.length-1;j++) {
+            if(srvList.children(i).text<srvList.children(j).text) {
+               srvList.children(i).swapNode(srvList.children(j));
+               }
+            }
+         }
+      }
+   catch(e) {
+      alert("XML Parsing Error: "+e.description);
+      }
+   srvDesc.innerText="";
+   if(srvList.length<1) alert("XML Error: No NetInstall Server found\nor no proper NetInstall XML configuration file.");
+   else wsh.RegWrite("HKLM\\SOFTWARE\\FlatByte\\Volusia\\XMLConfig" ,pathXMLFile, "REG_SZ");
+
+   }
+
+function chooseXMLFolder() {
+   var oShell = new ActiveXObject("Shell.Application");
+   var oFolder = oShell.BrowseForFolder(0, "Please select a new folder where a exported NetInstall XML configuration file resides. The default file name to be looked for will be export.xml.", 0);
+   if(oFolder!=null) {
+      sXMLOldValue=pXML.innerText;
+      //alert(sXMLOldValue);
+      oFolderItem = oFolder.Self;
+      var pathXMLFile=oFolderItem.Path+"\\"+sDefaultXMLFilename;
+      pXML.innerText=pathXMLFile;
+      if(fso.FileExists(pathXMLFile)) parseXML(pathXMLFile);
+      else alert("File Error: XML File not found!");
+    	}   
+   }
+function clearServerList() {
+	for(var i=srvList.length-1; i>-1 ;i--) {
+		srvList.remove(i);
+	   }
+   }
+
+function addToServerList(sText, sValue) {
+	var oOption = document.createElement("OPTION");
+	oOption.text=sText;
+	oOption.value=sValue;
+   var bAddItem=true;
+   for(i=0;i<srvList.length;i++) {
+      if(sText==srvList[i].text) bAddItem=false;
+      }
+	if(bAddItem) srvList.add(oOption);
+	return;
+}
+function XmlInput() {
+   if(event.keyCode==13) {
+      if(fso.FileExists(pXML.value)) parseXML(pXML.value);
+      else  alert("File Error: XML File not found!");
+   }
+}
+function setDescription(s) {
+   srvDesc.innerText=s;   
+   }
+function setCopySource() {
+   var oShell = new ActiveXObject("Shell.Application");
+   var oFolder = oShell.BrowseForFolder(0, "Please select a new root folder for your copy source.", 0);
+   if(oFolder!=null) {
+      oFolderItem = oFolder.Self;
+      pCpFrom.value=oFolderItem.Path;
+      sTarget="\\\\{server}\\"+oFolderItem.Path;
+      pCpTo.value=sTarget.replace(/:/i, "$");
+      }
+   }
+
+function ExecCmd() {
+   var sCommand="";
+   if(rCmd[0].checked) sCommand="ping";
+   else if(rCmd[1].checked) sCommand="sc";
+   else if(rCmd[2].checked) { 
+      sCommand="copy";
+      wsh.RegWrite("HKLM\\SOFTWARE\\FlatByte\\Volusia\\pCpFrom", pCpFrom.value, "REG_SZ");
+      wsh.RegWrite("HKLM\\SOFTWARE\\FlatByte\\Volusia\\pCpTo", pCpTo.value, "REG_SZ");
+      }
+   else if(rCmd[3].checked) sCommand="wmi";
+   else alert("Please make a selection!");
+
+   sDate=BuildCurrentDate();
+   sOutput=envTemp+"\\_$"+sCommand+"#"+sDate+".htm";
+   try { fso.DeleteFile(sOutput);}
+   catch (e) {;}
+
+   formatOutput(sOutput, "<html><style>pre,body{font-family:Tahoma;font-size:11px;margin:2}.blue{color:blue}.tab{border:1px #cccccc solid;padding:2}.hdr{border:1px solid #000000;color:#ffffff;background-color:#B85E68;color:#ffffff;padding:2;width:100%}</style>\n<body text=#000000 bgcolor=#ffffff>");
+   document.all.frmOutput.src="wait.htm";
+
+   for(var i=0; i<srvList.length; i++) {
+      if(srvList.options[i].selected) {
+         switch (sCommand) {
+            case "ping":
+               sCmd="cmd.exe /c ping "+srvList.options[i].text+" >>\""+sOutput+"\"";
+               formatOutput(sOutput,"<hr style='line-height:6px'><pre style='line-height:6px'>");
+               wsh.Run(sCmd,0,1);
+               formatOutput(sOutput,"</pre>");
+               //alert(sCmd);
+               break;
+            case "sc":
+               formatOutput(sOutput,"<hr style='line-height:6px'><b class=\"hdr\">"+srvList.options[i].text+"</b>");
+               if(svcRepl.checked) {
+                  sCmd="cmd.exe /c sc.exe \\\\"+srvList.options[i].text+" "+svcAction.options[svcAction.selectedIndex].text+" nireserv >>\""+sOutput+"\"";
+                  formatOutput(sOutput,"<pre>");
+                  wsh.Run(sCmd,0,1);
+                  formatOutput(sOutput,"</pre>");
+                  }
+               if(svcSIS.checked) {
+                  sCmd="cmd.exe /c sc.exe \\\\"+srvList.options[i].text+" "+svcAction.options[svcAction.selectedIndex].text+" nisis >>\""+sOutput+"\"";
+                  formatOutput(sOutput,"<pre>");
+                  wsh.Run(sCmd,0,1);
+                  formatOutput(sOutput,"</pre>");
+                  }
+               if(svcMPEx.checked) {
+                  sCmd="cmd.exe /c sc.exe \\\\"+srvList.options[i].text+" "+svcAction.options[svcAction.selectedIndex].text+" mpexserv >>\""+sOutput+"\"";
+                  formatOutput(sOutput,"<pre>");
+                  wsh.Run(sCmd,0,1);
+                  formatOutput(sOutput,"</pre>");
+                  }
+
+               break;
+            case "copy":
+               pCopyTarget=pCpTo.value;
+               pCopyTarget=pCopyTarget.replace(/{server}/, ""+srvList.options[i].text);
+               if(cpMirror.checked) sCpArgs=" /MIR";
+               else sCpArgs="/s /e /v /xo /np /r:1 /w:1";
+               sRCLog=envTemp+"\\robocopy_"+srvList.options[i].text+"_"+BuildCurrentDate()+".log";
+               sCpArgs+=" /tee /log+:"+sRCLog;
+
+               sCmd="cmd.exe /c robocopy.exe \""+pCpFrom.value+"\" \""+pCopyTarget+"\" "+sCpArgs;
+               formatOutput(sOutput,"<hr style='line-height:6px'><b class=\"hdr\">"+srvList.options[i].text+"</b>");
+               formatOutput(sOutput,"Robocopy Logfile: <nobr><a href=\""+sRCLog+"\" class=\"blue\" target=_new>"+sRCLog+"</a></nobr><br>");
+               
+               wsh.Run(sCmd,1,!cpMultiThread.checked);
+               formatOutput(sOutput,"</pre>");
+               
+               break;      
+            case "wmi":
+               formatOutput(sOutput,"<hr style='line-height:6px'><b class=\"hdr\">"+srvList.options[i].text+"</b><br>");
+               //wsh.Run("cmd.exe /c help",0,0);
+               getWMIInformation(sOutput, parseInt(wmiInfo.value), srvList.options[i].text);
+               break;
+            default:
+               break;
+            }
+         }
+      }
+   formatOutput(sOutput,"</body></html>");
+   document.all.frmOutput.src=sOutput;
+
+   }
+
+function getWMIInformation(sOutput, iType, sCompName) {
+   var wbemFlagReturnImmediately = 0x10;
+   var wbemFlagForwardOnly = 0x20;
+
+   switch (iType) {
+      case 0:
+         try {
+            var objWMIService = GetObject("winmgmts:\\\\" + sCompName + "\\root\\CIMV2");
+            var colItems = objWMIService.ExecQuery("SELECT * FROM Win32_ShareToDirectory", "WQL", wbemFlagReturnImmediately | wbemFlagForwardOnly);
+            var enumItems = new Enumerator(colItems);
+            for (; !enumItems.atEnd(); enumItems.moveNext()) {
+               var objItem = enumItems.item();
+               formatOutput(sOutput,"<div class=\"tab\">Share: <a class=\"blue\">"+objItem.Share+"</a><br>");
+               formatOutput(sOutput,"SharedElement: <a class=\"blue\">"+objItem.SharedElement+"</a></div>");
+               }
+            }
+         catch(e) {formatOutput(sOutput,"<font color=red>WMI Error</font>: "+e.description);}
+         break;
+      case 1:
+         try {
+            var objWMIService = GetObject("winmgmts:\\\\" + sCompName + "\\root\\CIMV2");
+            var colItems = objWMIService.ExecQuery("SELECT * FROM Win32_NTEventlogFile", "WQL", wbemFlagReturnImmediately | wbemFlagForwardOnly);
+            var enumItems = new Enumerator(colItems);
+            for (; !enumItems.atEnd(); enumItems.moveNext()) {
+               var objItem = enumItems.item();
+               formatOutput(sOutput,"<div class=\"tab\">Caption: <a class=\"blue\">"+objItem.Caption+"</a><br>");
+               formatOutput(sOutput,"LogfileName: <a class=\"blue\">"+objItem.LogfileName+"</a><br>");               
+               formatOutput(sOutput,"FileSize: <a class=\"blue\">"+objItem.FileSize+"</a><br>");
+               formatOutput(sOutput,"NumberOfRecords: <a class=\"blue\">"+objItem.NumberOfRecords+"</a><br>");
+               formatOutput(sOutput,"LastAccessed: <a class=\"blue\">"+WMIDateStringToDate(objItem.LastAccessed)+"</a><br>");
+               formatOutput(sOutput,"LastModified: <a class=\"blue\">"+WMIDateStringToDate(objItem.LastModified)+"</a></div>");
+               }
+            }
+         catch(e) {formatOutput(sOutput,"<font color=red>WMI Error</font>: "+e.description);}
+         break;
+      case 2:
+         try {
+            var objWMIService = GetObject("winmgmts:\\\\" + sCompName + "\\root\\CIMV2");
+            var colItems = objWMIService.ExecQuery("SELECT * FROM Win32_OperatingSystem", "WQL", wbemFlagReturnImmediately | wbemFlagForwardOnly);
+            var enumItems = new Enumerator(colItems);
+            for (; !enumItems.atEnd(); enumItems.moveNext()) {
+               var objItem = enumItems.item();
+               formatOutput(sOutput,"<div class=\"tab\">Caption: <a class=\"blue\">"+objItem.Caption+"</a><br>");
+               formatOutput(sOutput,"SerialNumber: <a class=\"blue\">"+objItem.SerialNumber+"</a><br>");               
+               formatOutput(sOutput,"CSDVersion: <a class=\"blue\">"+objItem.CSDVersion+"</a><br>");
+               formatOutput(sOutput,"OSLanguage: <a class=\"blue\">"+objItem.OSLanguage+"</a><br>");
+               formatOutput(sOutput,"BootDevice: <a class=\"blue\">"+objItem.BootDevice+"</a><br>");
+               formatOutput(sOutput,"TotalVisibleMemorySize: <a class=\"blue\">"+objItem.TotalVisibleMemorySize+" KB</a><br>");
+               formatOutput(sOutput,"FreeSpaceInPagingFiles: <a class=\"blue\">"+objItem.FreeSpaceInPagingFiles+" KB</a><br>");
+               formatOutput(sOutput,"LastBootUpTime: <a class=\"blue\">"+WMIDateStringToDate(objItem.LastBootUpTime)+"</a></div>");
+               }
+            }
+         catch(e) {formatOutput(sOutput,"<font color=red>WMI Error</font>: "+e.description);}
+         break;
+      case 3:
+         try {
+            var objWMIService = GetObject("winmgmts:\\\\" + sCompName + "\\root\\CIMV2");
+            var colItems = objWMIService.ExecQuery("SELECT * FROM Win32_LogicalDisk", "WQL", wbemFlagReturnImmediately | wbemFlagForwardOnly);
+            var enumItems = new Enumerator(colItems);
+            for (; !enumItems.atEnd(); enumItems.moveNext()) {
+               var objItem = enumItems.item();
+               formatOutput(sOutput,"<div class=\"tab\">Caption: <a class=\"blue\">"+objItem.Caption+"</a><br>");
+               formatOutput(sOutput,"VolumeName: <a class=\"blue\">"+objItem.VolumeName+"</a><br>");               
+               formatOutput(sOutput,"VolumeSerialNumber: <a class=\"blue\">"+objItem.VolumeSerialNumber+"</a><br>");
+               formatOutput(sOutput,"FileSystem: <a class=\"blue\">"+objItem.FileSystem+"</a><br>");
+               formatOutput(sOutput,"Size: <a class=\"blue\">"+ByteToGig(objItem.Size)+" GB ("+objItem.Size+" bytes)</a><br>");
+               formatOutput(sOutput,"FreeSpace: <a class=\"blue\">"+ByteToGig(objItem.FreeSpace)+" GB ("+objItem.FreeSpace+" bytes)</a><br>");
+               formatOutput(sOutput,"VolumeDirty: <a class=\"blue\">"+objItem.VolumeDirty+"</a></div>");
+               }
+            }
+         catch(e) {formatOutput(sOutput,"<font color=red>WMI Error</font>: "+e.description);}
+         break;
+      case 4:
+         try {
+            var objWMIService = GetObject("winmgmts:\\\\" + sCompName + "\\root\\CIMV2");
+            var colItems = objWMIService.ExecQuery("SELECT * FROM Win32_Process", "WQL", wbemFlagReturnImmediately | wbemFlagForwardOnly);
+            var enumItems = new Enumerator(colItems);
+            for (; !enumItems.atEnd(); enumItems.moveNext()) {
+               var objItem = enumItems.item();
+               formatOutput(sOutput,"<div class=\"tab\">Caption: <a class=\"blue\">"+objItem.Caption+"</a><br>");
+               formatOutput(sOutput,"CommandLine: <a class=\"blue\">"+objItem.CommandLine+"</a><br>");               
+               formatOutput(sOutput,"ProcessId: <a class=\"blue\">"+objItem.ProcessId+"</a><br>");
+               formatOutput(sOutput,"Priority: <a class=\"blue\">"+objItem.Priority+"</a><br>");
+               formatOutput(sOutput,"WorkingSetSize: <a class=\"blue\">"+(Math.round((objItem.WorkingSetSize/1024)*100))/100+" KB</a></div>");
+               }
+            }
+         catch(e) {formatOutput(sOutput,"<font color=red>WMI Error</font>: "+e.description);}
+         break;
+      case 5:
+         try {
+            var objWMIService = GetObject("winmgmts:\\\\" + sCompName + "\\root\\CIMV2");
+            var colItems = objWMIService.ExecQuery("SELECT * FROM Win32_SystemUsers", "WQL", wbemFlagReturnImmediately | wbemFlagForwardOnly);
+            var enumItems = new Enumerator(colItems);
+            for (; !enumItems.atEnd(); enumItems.moveNext()) {
+               var objItem = enumItems.item();
+               formatOutput(sOutput,"<div class=\"tab\">GroupComponent: <a class=\"blue\">"+objItem.GroupComponent+"</a><br>");
+               formatOutput(sOutput,"PartComponent: <a class=\"blue\">"+objItem.PartComponent+"</a></div>");               
+               }
+            }
+         catch(e) {formatOutput(sOutput,"<font color=red>WMI Error</font>: "+e.description);}
+         break;
+
+      default:
+         break;
+      }
+   }
+
+function BuildCurrentDate() {
+   var d=new Date();
+   return(d.getFullYear()+""+(d.getMonth()+1)+""+d.getDate());
+   }
+function formatOutput(sOutput, sLine) {
+   try {
+      if(!fso.FileExists(sOutput)) {
+         var f=fso.CreateTextFile(sOutput,false, false);
+         }
+      else {
+         var f=fso.OpenTextFile(sOutput,8,0);
+         }
+      f.WriteLine(sLine);
+      f.Close();
+      }
+   catch(e) {alert("File Error: "+e.description);}
+   }
+function WidenDisplay(i) {
+   if(i) {
+      srvListTD.style.display='none';
+      //srvListTD.style.width=1;
+      CmdTable.style.display='none';
+      document.all.frmOutput.style.width=600;
+      document.all.frmOutput.style.height=420;
+      }
+   else {
+      srvListTD.style.display='';
+      CmdTable.style.display='';
+      //srvListTD.style.width=204;
+      document.all.frmOutput.style.width=390;
+      document.all.frmOutput.style.height=241;
+      }
+
+   }
+function ByteToMega(i) {
+   r=i;//r=Math.round(i/1000);
+   r=(Math.round((r/1024)*100))/100;      
+   return (r);
+   }
+
+function ByteToGig(i) {
+   r=Math.round(i/1000000);
+   r=(Math.round((r/1000)*100))/100;      
+   return (r);
+   }
+function WMIDateStringToDate(dtmDate)
+{
+   if (dtmDate == null) {
+      return "null date";
+      }
+   var strDateTime;
+   if (dtmDate.substr(6, 1) == 0) {
+      strDateTime = dtmDate.substr(7, 1) + ".";
+      }
+   else {
+      strDateTime = dtmDate.substr(6, 2) + ".";
+      }
+   if (dtmDate.substr(4, 1) == 0) {
+      strDateTime = strDateTime + dtmDate.substr(5, 1) + ".";
+      }
+   else {
+      strDateTime = strDateTime + dtmDate.substr(4, 2) + ".";
+      }
+   strDateTime = strDateTime + dtmDate.substr(0, 4) + " " +
+   dtmDate.substr(8, 2) + ":" +
+   dtmDate.substr(10, 2) + ":" +
+   dtmDate.substr(12, 2);
+   return(strDateTime);
+}
+
+function AutoStart() {
+   try {
+      pathXML=wsh.RegRead("HKLM\\SOFTWARE\\FlatByte\\Volusia\\XMLConfig");
+      parseXML(pathXML);
+      pXML.value=pathXML;
+      pCpFrom.value=wsh.RegRead("HKLM\\SOFTWARE\\FlatByte\\Volusia\\pCpFrom");
+      pCpTo.value=wsh.RegRead("HKLM\\SOFTWARE\\FlatByte\\Volusia\\pCpTo");
+      }
+   catch(e) {
+      pathXML=".\\"+sDefaultXMLFilename;
+      if(fso.FileExists(pathXML)) { parseXML(pathXML);pXML.value=pathXML;}
+      }
+   }
+
+</script>
+<style>
+ body, button, input, p, td, select {font-family:Tahoma;font-size:11px}
+ optgroup {font-family:Tahoma;font-size:12px;font-weight:normal;font-style:normal}
+ //button, input {background-color:white;}
+ a:hover{text-decoration:underline;color:#000066}
+ a:visited{text-decoration:none;color:#000000}
+ a:link{text-decoration:none;color:#333333}
+ .prjtree, legend {color:blue;background-color:#efedde;border:1px solid #dddeee;margin-left:5px;}
+ legend {border:1px solid #000000;color:#f8f8f8;background-color:#B85E68;padding-left:5;padding-right:5;}
+ fieldset {border:1px solid #000000;padding:1}
+ .divgray {color:#cccccc;font-weight:bold}
+ .tdbottom {color:#cccccc;border:1px #efedde dashed}
+ .white {color:#ffffff;font-weight:bolder;}
+ .gradient {border-bottom:1px solid gray dashed;filter: progid:DXImageTransform.Microsoft.Gradient(gradientType=1,startColorstr=#a0a0FF,endColorstr=#f8f8f8)}
+</style>
+<META HTTP-EQUIV="MSTHEMECOMPATIBLE" CONTENT="yes">
+</head>
+<body id="gbody" onLoad="AutoStart();" style="background-color:#f1f1f1;margin-top:0;margin-right:5" text=#000000 link=#000099 vlink=#000099 alink=#000099 style="background:url(.\ponce2.png)">
+
+<div style="top:10;right:4;position:absolute">
+<a href="#" onClick="window.showModalDialog('./help.htm', '' ,'dialogHeight:450px; dialogWidth:350px')"><img src="help.png" border=0 height=32 width=32></a>
+</div>
+
+
+<div style="top:50;right:4;position:absolute">
+Exported XML Config: <input size=30 name=pXML OnKeyDown="XmlInput()"><button OnClick="chooseXMLFolder();">...</button>
+</div>
+
+
+<div style="margin-left:150">
+<br><br><br><br><br><br>
+<table width=620 cellpadding=1 cellspacing=5>
+<tr><td width=204 id="srvListTD">
+<fieldset>
+<legend>NetInstall Servers</legend>
+<select size=17 style="width:200;height:220" multiple id="srvList" OnChange="setDescription(this.options[this.selectedIndex].value)">
+</select>
+<input id="srvDesc" style="width:200" disabled>
+</fieldset>
+</td><td>
+<fieldset>
+<legend>Output <a href="#" onClick="WidenDisplay(1);" title="Extend Display"><span class="white">&laquo;</span></a>|<a href="#" onClick="WidenDisplay(0);" title="Restore Display"><span class="white">&raquo;</span></a></legend>
+<iframe src="welcome.htm" style="width:390;height:241" id="frmOutput">
+</iframe>
+</fieldset>
+</td></tr></table>
+
+<table width=620 cellpadding=1 cellspacing=5 id="CmdTable">
+<tr><td>
+<fieldset>
+<legend>Command</legend>
+<input type=radio name="rCmd" value="ping" checked>Ping
+<br>
+
+<input type=radio name="rCmd" value="services">Manage Services
+<div style="margin-left:30">
+<input name="svcRepl" type=checkbox checked>Replication (nireserv)
+<input name="svcSIS" type=checkbox checked>SIS (nisis)
+<input name="svcMPEx" type=checkbox>Mgmtpoint Exec (mpexserv)
+&nbsp;&raquo;&nbsp;
+Service Action:
+<select name="svcAction">
+<option>Query
+<option>Stop
+<option>Start
+<select>
+</div>
+
+<input type=radio name="rCmd" value="copy">Copy Files
+<div style="margin-left:30">
+From:<input size=30 name="pCpFrom" value="c:\temp\"><button name="btnCpFrom" onClick="setCopySource();">...</button> To: <input size=30 name="pCpTo" value="\\{server}\c$\temp\">
+<input name="cpMirror" type=checkbox>Mirroring
+<input name="cpMultiThread" type=checkbox checked>MultiThread
+</div>
+
+<input type=radio name="rCmd" value="info">Information about 
+<select name="wmiInfo">
+<option value=0>Shares
+<option value=1>EventLog   
+<option value=2>Operating System
+<option value=3>Logical Disks
+<option value=4>Processes
+<option value=5>System Users
+</select>
+
+<div align="right" style="padding:3"><button name="btnGo" onClick="ExecCmd()">Execute Command</button></div>
+</fieldset>
+
+</td></tr></table>
+</div>
+
+<div id=copyright style="bottom:2;right:2;position:absolute;color:#f1f1f1">
+&copy;2005 by <a href="http://www.flatbyte.com">flatbyte.com</a>. All rights reserved.
+</div>
+</body>
+</html>
+
+
